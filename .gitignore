@@ -1,0 +1,6 @@
+*.retry
+*.vault
+logs/
+*.pdf
+*.swp
+.DS_Store
