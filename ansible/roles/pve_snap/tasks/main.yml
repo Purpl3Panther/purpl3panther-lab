@@ -61,15 +61,18 @@
 
 - name: Snapshot-only each guest
   uri:
-    url: "https://{{ pve_api_host }}:8006/api2/json/nodes/{{ pve_node }}/{{ item.type }}/{{ item.vmid }}/snapshot"
+    url: >-
+      https://{{ pve_api_host }}:8006/api2/json/nodes/{{ pve_node }}/{{ item.type }}/{{ item.vmid }}/snapshot
     method: POST
     validate_certs: false
     headers:
       Authorization: "PVEAPIToken={{ pve_api_user }}={{ pve_api_token }}"
     status_code: 200
-    body:
-      snapname: "{{ snapshot_tag }}"
-      vmstate:  0            # no RAM dump
+    body: |
+      snapname={{ snapshot_tag }}
+      {% if item.type == 'qemu' %}
+      vmstate=0
+      {% endif %}
     body_format: form-urlencoded
   loop: "{{ vm_list }}"
   loop_control:
