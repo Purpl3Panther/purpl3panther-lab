@@ -1,0 +1,17 @@
+- name: Proxmox API ping
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../group_vars/proxmox.yml        # ← path relativo al playbook
+  tasks:
+    - name: Get Proxmox version
+      uri:
+        url: "https://{{ pve_api_host }}:8006/api2/json/version"
+        method: GET
+        validate_certs: false
+        headers:
+          Authorization: "PVEAPIToken={{ pve_api_user }}={{ pve_api_token }}"
+      register: resp
+
+    - debug:
+        var: resp.json.data
