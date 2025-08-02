@@ -1,4 +1,9 @@
-- name: Get list of VMs on the node
+# =====================================================================
+# pve_snap : tasks/main.yml
+# Crea uno snapshot-only di ogni VM (KVM) e CT (LXC) presenti sul nodo
+# =====================================================================
+
+- name: Gather nodes list
   uri:
     url: "https://{{ pve_api_host }}:8006/api2/json/nodes"
     method: GET
@@ -7,22 +12,56 @@
       Authorization: "PVEAPIToken={{ pve_api_user }}={{ pve_api_token }}"
   register: nodes_resp
 
-- name: Extract node name
+- name: Select first node (single-node lab)
   set_fact:
-    pve_node: "{{ (nodes_resp.json.data[0]).node }}"
+    pve_node: "{{ (nodes_resp.json.data | first).node }}"
 
-- name: Get VMs on node {{ pve_node }}
+# ---------- QEMU VM ---------------------------------------------------
+
+- name: Get QEMU VMs on {{ pve_node }}
+  uri:
+    url: "https://{{ pve_api_host }}:8006/api2/json/nodes/{{ pve_node }}/qemu"
+    method: GET
+    validate_certs: false
+    headers:
+      Authorization: "PVEAPIToken={{ pve_api_user }}={{ pve_api_token }}"
+  register: qemu_resp
+
+- name: Tag QEMU list with type
+  set_fact:
+    qemu_list: "{{ qemu_resp.json.data | map('combine', {'type': 'qemu'}) | list }}"
+
+# ---------- LXC CT ----------------------------------------------------
+
+- name: Get LXC containers on {{ pve_node }}
   uri:
     url: "https://{{ pve_api_host }}:8006/api2/json/nodes/{{ pve_node }}/lxc"
     method: GET
     validate_certs: false
     headers:
       Authorization: "PVEAPIToken={{ pve_api_user }}={{ pve_api_token }}"
-  register: vmlist_resp
+  register: lxc_resp
 
-- name: Snapshot-only each VM (loop)
+- name: Tag LXC list with type
+  set_fact:
+    lxc_list: "{{ lxc_resp.json.data | map('combine', {'type': 'lxc'}) | list }}"
+
+# ---------- Merge & sanity-check --------------------------------------
+
+- name: Combine all guests
+  set_fact:
+    vm_list: "{{ qemu_list + lxc_list }}"
+
+- name: Abort if no guests found
+  fail:
+    msg: "Nessuna VM/CT trovata sul nodo {{ pve_node }} – controlla permessi o endpoint."
+  when: vm_list | length == 0
+
+# ---------- Snapshot --------------------------------------------------
+
+- name: Snapshot-only each guest
   uri:
-    url: "https://{{ pve_api_host }}:8006/api2/json/nodes/{{ pve_node }}/lxc/{{ item.vmid }}/snapshot"
+    url: "https://{{ pve_api_host }}:8006/api2/json/nodes/{{ pve_node }}/{{ item.type }}/{{ item.vmid }}/snapshot"
     method: POST
     validate_certs: false
     headers:
@@ -30,8 +69,8 @@
     status_code: 200
     body:
       snapname: "{{ snapshot_tag }}"
-      vmstate:  0                       # snapshot-only, no RAM dump
+      vmstate:  0            # no RAM dump
     body_format: form-urlencoded
-  loop: "{{ vmlist_resp.json.data }}"
+  loop: "{{ vm_list }}"
   loop_control:
-    label: "{{ item.name }} (VMID {{ item.vmid }})"
+    label: "{{ item.name | default('vmid ' + item.vmid | string) }}"
