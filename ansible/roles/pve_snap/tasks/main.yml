@@ -1,0 +1,37 @@
+- name: Get list of VMs on the node
+  uri:
+    url: "https://{{ pve_api_host }}:8006/api2/json/nodes"
+    method: GET
+    validate_certs: false
+    headers:
+      Authorization: "PVEAPIToken={{ pve_api_user }}={{ pve_api_token }}"
+  register: nodes_resp
+
+- name: Extract node name
+  set_fact:
+    pve_node: "{{ (nodes_resp.json.data[0]).node }}"
+
+- name: Get VMs on node {{ pve_node }}
+  uri:
+    url: "https://{{ pve_api_host }}:8006/api2/json/nodes/{{ pve_node }}/lxc"
+    method: GET
+    validate_certs: false
+    headers:
+      Authorization: "PVEAPIToken={{ pve_api_user }}={{ pve_api_token }}"
+  register: vmlist_resp
+
+- name: Snapshot-only each VM (loop)
+  uri:
+    url: "https://{{ pve_api_host }}:8006/api2/json/nodes/{{ pve_node }}/lxc/{{ item.vmid }}/snapshot"
+    method: POST
+    validate_certs: false
+    headers:
+      Authorization: "PVEAPIToken={{ pve_api_user }}={{ pve_api_token }}"
+    status_code: 200
+    body:
+      snapname: "{{ snapshot_tag }}"
+      vmstate:  0                       # snapshot-only, no RAM dump
+    body_format: form-urlencoded
+  loop: "{{ vmlist_resp.json.data }}"
+  loop_control:
+    label: "{{ item.name }} (VMID {{ item.vmid }})"
