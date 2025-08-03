@@ -1,0 +1,27 @@
+---
+# Update + dist-upgrade + reboot-se-serve
+
+- name: Update APT cache (quiet, valid 1h)
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+
+- name: Full dist-upgrade
+  apt:
+    upgrade: dist
+  register: upgrade_res
+  become: yes
+
+- name: Check if reboot required (Ubuntu/Debian flag file)
+  stat:
+    path: /var/run/reboot-required
+  register: reboot_flag
+  become: yes
+
+- name: Reboot if kernel or core libs updated
+  reboot:
+    msg: "Reboot after dist-upgrade via Ansible"
+    pre_reboot_delay: 60
+  when: reboot_flag.stat.exists or upgrade_res is changed
+  become: yes

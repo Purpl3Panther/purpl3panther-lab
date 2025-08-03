@@ -1,0 +1,6 @@
+- name: Dist-upgrade Proxmox host
+  hosts: proxmox             # usa l’host già definito in inventory
+  gather_facts: yes
+  roles:
+    - pve_apt
+
